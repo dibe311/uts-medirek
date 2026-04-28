@@ -40,15 +40,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (!password_verify($password, $user['password'])) {
             $error = 'Email atau password tidak valid.';
         } else {
-            // --- Success: build session ---
-            session_regenerate_id(true); // prevent session fixation
-
-            $_SESSION['user'] = [
+            // --- Success: simpan ke signed cookie (tidak butuh session PHP) ---
+            loginUser([
                 'id'    => (int)$user['id'],
                 'name'  => $user['name'],
                 'email' => $user['email'],
                 'role'  => $user['role'],
-            ];
+            ]);
 
             // Update last_login
             $db->prepare("UPDATE users SET last_login = NOW() WHERE id = ?")
