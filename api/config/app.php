@@ -7,7 +7,6 @@ define('BASE_URL', rtrim(getenv('APP_URL') ? getenv('APP_URL') : '', '/'));
 define('SESSION_TIMEOUT', 3600);
 
 if (session_status() === PHP_SESSION_NONE) {
-    // Vercel menggunakan proxy, HTTPS dideteksi via HTTP_X_FORWARDED_PROTO
     $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
             || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
 
@@ -16,7 +15,7 @@ if (session_status() === PHP_SESSION_NONE) {
         'path'     => '/',
         'secure'   => $isHttps,
         'httponly' => true,
-        'samesite' => 'Lax', // Strict menyebabkan redirect loop di Vercel
+        'samesite' => 'Lax',
     ));
     session_start();
 }
@@ -32,7 +31,7 @@ $_SESSION['last_activity'] = time();
 // ----- Auth helpers -----
 
 function loginUser(array $data) {
-    session_regenerate_id(true);
+    // TIDAK pakai session_regenerate_id() - menyebabkan redirect loop di Vercel serverless
     $_SESSION['user'] = array(
         'id'    => (int)$data['id'],
         'name'  => $data['name'],
@@ -98,8 +97,6 @@ function getFlash() {
     }
     return null;
 }
-
-// ----- Utility helpers -----
 
 function generateQueueNumber($pdo, $date) {
     $stmt = $pdo->prepare("SELECT COUNT(*) FROM queues WHERE queue_date = ?");
