@@ -26,6 +26,24 @@ if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) >
 }
 $_SESSION['last_activity'] = time();
 
+// ----- Auth helpers -----
+
+function loginUser(array $data) {
+    session_regenerate_id(true); // cegah session fixation attack
+    $_SESSION['user'] = array(
+        'id'    => (int)$data['id'],
+        'name'  => $data['name'],
+        'email' => $data['email'],
+        'role'  => $data['role'],
+    );
+    $_SESSION['last_activity'] = time();
+}
+
+function logoutUser() {
+    session_unset();
+    session_destroy();
+}
+
 function currentUser() {
     return isset($_SESSION['user']) ? $_SESSION['user'] : null;
 }
@@ -77,6 +95,8 @@ function getFlash() {
     }
     return null;
 }
+
+// ----- Utility helpers -----
 
 function generateQueueNumber($pdo, $date) {
     $stmt = $pdo->prepare("SELECT COUNT(*) FROM queues WHERE queue_date = ?");
