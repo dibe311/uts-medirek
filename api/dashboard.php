@@ -324,14 +324,7 @@ $extraHead  = ''; // inner.css already loaded via header.php cssFile default
                   </td>
                   <td>
                     <span class="badge badge-<?= $q['status'] ?>">
-                      <?= match($q['status']) {
-                        'waiting'     => 'Menunggu',
-                        'called'      => 'Dipanggil',
-                        'in_progress' => 'Diperiksa',
-                        'done'        => 'Selesai',
-                        'cancelled'   => 'Batal',
-                        default       => $q['status']
-                      } ?>
+                      <?= queueStatusLabel($q['status']) ?>
                     </span>
                   </td>
                   <td>
@@ -545,22 +538,14 @@ $extraHead  = ''; // inner.css already loaded via header.php cssFile default
           <div class="queue-banner-info">
             <h3>Nomor Antrian Aktif</h3>
             <p>
-              Status: <strong><?= match($activeQueue['status']) {
-                'waiting'     => 'Menunggu dipanggil',
-                'called'      => 'Silakan masuk',
-                'in_progress' => 'Sedang diperiksa',
-                default       => $activeQueue['status']
-              } ?></strong>
+              Status: <strong><?= queueStatusLabel($activeQueue['status']) ?></strong>
               <?php if ($activeQueue['doctor_name']): ?>
                 · Dokter: Dr. <?= sanitize($activeQueue['doctor_name']) ?>
               <?php endif; ?>
             </p>
           </div>
           <span class="badge badge-<?= $activeQueue['status'] ?>" style="margin-left:auto">
-            <?= match($activeQueue['status']) {
-              'waiting' => 'Menunggu', 'called' => 'Dipanggil',
-              'in_progress' => 'Diperiksa', default => $activeQueue['status']
-            } ?>
+            <?= queueStatusLabel($activeQueue['status']) ?>
           </span>
         </div>
         <?php else: ?>

@@ -82,11 +82,13 @@ try {
     }
 
     // Build UPDATE — set timestamp yang relevan
-    $timestampField = match($action) {
-        'called'      => ', called_at = NOW()',
-        'done'        => ', done_at   = NOW()',
-        default       => '',
-    };
+    if ($action === 'called') {
+        $timestampField = ', called_at = NOW()';
+    } elseif ($action === 'done') {
+        $timestampField = ', done_at = NOW()';
+    } else {
+        $timestampField = '';
+    }
 
     $db->prepare("
         UPDATE queues
