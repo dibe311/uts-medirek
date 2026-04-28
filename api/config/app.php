@@ -3,17 +3,20 @@ ob_start();
 
 define('APP_NAME', 'MediRek');
 define('APP_VERSION', '1.0.0');
-// APP_URL: kosongkan ('') untuk Vercel/production. Untuk XAMPP lokal: 'http://localhost/medirek/api'
 define('BASE_URL', rtrim(getenv('APP_URL') ? getenv('APP_URL') : '', '/'));
 define('SESSION_TIMEOUT', 3600);
 
 if (session_status() === PHP_SESSION_NONE) {
+    // Vercel menggunakan proxy, HTTPS dideteksi via HTTP_X_FORWARDED_PROTO
+    $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+
     session_set_cookie_params(array(
         'lifetime' => SESSION_TIMEOUT,
         'path'     => '/',
-        'secure'   => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on',
+        'secure'   => $isHttps,
         'httponly' => true,
-        'samesite' => 'Strict',
+        'samesite' => 'Lax', // Strict menyebabkan redirect loop di Vercel
     ));
     session_start();
 }
@@ -29,7 +32,7 @@ $_SESSION['last_activity'] = time();
 // ----- Auth helpers -----
 
 function loginUser(array $data) {
-    session_regenerate_id(true); // cegah session fixation attack
+    session_regenerate_id(true);
     $_SESSION['user'] = array(
         'id'    => (int)$data['id'],
         'name'  => $data['name'],
