@@ -9,7 +9,7 @@
 require_once 'config/app.php';
 require_once 'config/database.php';
 
-if (isLoggedIn()) redirect('dashboard');
+if (isLoggedIn()) redirect('dashboard.php');
 
 $flash   = getFlash();
 $error   = '';
@@ -53,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                ->execute([$user['id']]);
 
             flashMessage('success', 'Selamat datang, ' . $user['name'] . '!');
-            redirect('dashboard');
+            redirect('dashboard.php');
         }
     }
 
