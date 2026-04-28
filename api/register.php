@@ -7,7 +7,10 @@
 require_once 'config/app.php';
 require_once 'config/database.php';
 
-if (isLoggedIn()) redirect('dashboard');
+// CATATAN: isLoggedIn() TIDAK diblokir di sini agar user yang sudah login
+// tetap bisa mengakses halaman register (misal: admin mendaftarkan akun lain).
+// Hapus komentar di bawah jika ingin membatasi kembali:
+// if (isLoggedIn()) redirect('dashboard');
 
 const ALLOWED_ROLES = ['admin', 'dokter', 'perawat', 'pasien'];
 
@@ -28,12 +31,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = $_POST['password']         ?? '';
     $confirm  = $_POST['confirm_password'] ?? '';
 
-    if (empty($old['name']))                                              $errors['name']     = 'Nama wajib diisi.';
-    elseif (strlen($old['name']) < 3)                                     $errors['name']     = 'Nama minimal 3 karakter.';
-    if (empty($old['email']))                                             $errors['email']    = 'Email wajib diisi.';
-    elseif (!filter_var($old['email'], FILTER_VALIDATE_EMAIL))            $errors['email']    = 'Format email tidak valid.';
-    if (strlen($password) < 6)                                            $errors['password'] = 'Password minimal 6 karakter.';
-    if ($password !== $confirm)                                           $errors['confirm']  = 'Konfirmasi password tidak cocok.';
+    if (empty($old['name']))                                   $errors['name']     = 'Nama wajib diisi.';
+    elseif (strlen($old['name']) < 3)                          $errors['name']     = 'Nama minimal 3 karakter.';
+    if (empty($old['email']))                                  $errors['email']    = 'Email wajib diisi.';
+    elseif (!filter_var($old['email'], FILTER_VALIDATE_EMAIL)) $errors['email']    = 'Format email tidak valid.';
+    if (strlen($password) < 6)                                 $errors['password'] = 'Password minimal 6 karakter.';
+    if ($password !== $confirm)                                $errors['confirm']  = 'Konfirmasi password tidak cocok.';
     if (!in_array($old['role'], ALLOWED_ROLES, true)) {
         $errors['role'] = 'Role tidak valid.';
         $old['role']    = 'pasien';
@@ -62,11 +65,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Wilayah script dipass ke footer.php via $extraScript
-$_baseUrl    = BASE_URL;
-$_savedProv  = addslashes($old['province'] ?? '');
-$_savedCity  = addslashes($old['city']     ?? '');
-$extraScript = "<script>
+$_baseUrl   = BASE_URL;
+$_savedProv = addslashes($old['province'] ?? '');
+$_savedCity = addslashes($old['city']     ?? '');
+
+$extraScript = <<<JSEOF
+<script>
 (function () {
   const WILAYAH_PROXY = '{$_baseUrl}/apb/wilayah';
 
@@ -80,38 +84,64 @@ $extraScript = "<script>
 
   let wilayah = null;
 
+  // ── Fetch semua domain sekali dari proxy lokal (PHP → BPS, tidak kena CORS) ──
   async function fetchWilayah() {
-    const res  = await fetch(WILAYAH_PROXY);
+    const res = await fetch(WILAYAH_PROXY);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     const json = await res.json();
+
+    if (json.error) throw new Error(json.error);
     if (json.status !== 'OK' || !Array.isArray(json.data)) {
-      throw new Error('Response BPS tidak valid');
+      throw new Error('Response tidak valid');
     }
-    const semua = json.data[1] ?? json.data;
+
+    // BPS: data[0] = info pagination, data[1] = array domain
+    const semua = Array.isArray(json.data[1]) ? json.data[1] : json.data;
+
     const provinsi  = [];
     const kabupaten = {};
-    semua.forEach(item => {
-      const id   = String(item.domain_id);
-      const nama = item.domain_name;
-      if (id.endsWith('00') && id.length === 4) {
-        provinsi.push({ id, nama });
-      } else if (id.length === 4 && !id.endsWith('00')) {
-        const provPrefix = id.substring(0, 2);
-        if (!kabupaten[provPrefix]) kabupaten[provPrefix] = [];
-        kabupaten[provPrefix].push({ id, nama });
+
+    semua.forEach(function(item) {
+      // BPS kadang kirim domain_id sebagai angka atau string
+      const id   = String(item.domain_id).trim();
+      const nama = String(item.domain_name).trim();
+
+      // Provinsi: 4 karakter, dua digit terakhir "00" → misal "3200", "1100"
+      // ATAU 2 karakter murni → misal "32", "11" (format lama BPS)
+      const isProvinsi = (id.length === 4 && id.endsWith('00'))
+                      || (id.length === 2);
+
+      // Kabupaten/Kota: 4 karakter tidak diakhiri "00"
+      const isKabupaten = id.length === 4 && !id.endsWith('00');
+
+      if (isProvinsi) {
+        // Normalisasi key: ambil 2 digit pertama sebagai prefix
+        const key = id.length === 4 ? id.substring(0, 2) : id;
+        provinsi.push({ id, nama, key });
+      } else if (isKabupaten) {
+        const key = id.substring(0, 2);
+        if (!kabupaten[key]) kabupaten[key] = [];
+        kabupaten[key].push({ id, nama });
       }
     });
-    provinsi.sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
-    Object.keys(kabupaten).forEach(k =>
-      kabupaten[k].sort((a, b) => a.nama.localeCompare(b.nama, 'id'))
-    );
+
+    provinsi.sort(function(a, b) { return a.nama.localeCompare(b.nama, 'id'); });
+    Object.keys(kabupaten).forEach(function(k) {
+      kabupaten[k].sort(function(a, b) { return a.nama.localeCompare(b.nama, 'id'); });
+    });
+
+    console.log('[BPS] Provinsi:', provinsi.length, '| Kabupaten keys:', Object.keys(kabupaten).length);
     return { provinsi, kabupaten };
   }
 
   function isiProvinsi() {
     selProv.innerHTML = '<option value="">— Pilih Provinsi —</option>';
-    wilayah.provinsi.forEach(p => {
+    wilayah.provinsi.forEach(function(p) {
       const opt = document.createElement('option');
-      opt.value = p.id; opt.textContent = p.nama; opt.dataset.name = p.nama;
+      opt.value = p.id;
+      opt.textContent = p.nama;
+      opt.dataset.name = p.nama;
+      opt.dataset.key  = p.key;
       if (p.id === savedProv) opt.selected = true;
       selProv.appendChild(opt);
     });
@@ -120,13 +150,21 @@ $extraScript = "<script>
   }
 
   function isiKabupaten(provId) {
-    const provPrefix = String(provId).substring(0, 2);
-    const daftar     = wilayah.kabupaten[provPrefix] ?? [];
+    // Key = 2 digit pertama dari domain_id provinsi
+    const key    = String(provId).substring(0, 2);
+    const daftar = wilayah.kabupaten[key] ?? [];
+
     selCity.innerHTML = '<option value="">— Pilih Kabupaten/Kota —</option>';
-    if (!daftar.length) { selCity.disabled = true; return; }
-    daftar.forEach(c => {
+    if (!daftar.length) {
+      selCity.innerHTML = '<option value="">Tidak ada data untuk provinsi ini</option>';
+      selCity.disabled  = true;
+      return;
+    }
+    daftar.forEach(function(c) {
       const opt = document.createElement('option');
-      opt.value = c.id; opt.textContent = c.nama; opt.dataset.name = c.nama;
+      opt.value = c.id;
+      opt.textContent = c.nama;
+      opt.dataset.name = c.nama;
       if (c.id === savedCity) opt.selected = true;
       selCity.appendChild(opt);
     });
@@ -137,20 +175,22 @@ $extraScript = "<script>
     }
   }
 
-  selProv.addEventListener('change', function () {
+  selProv.addEventListener('change', function() {
     const chosen = this.options[this.selectedIndex];
-    hidProvName.value = chosen.dataset.name || '';
+    hidProvName.value = chosen ? (chosen.dataset.name || '') : '';
     hidCityName.value = '';
     selCity.innerHTML = '<option value="">— Pilih Kabupaten/Kota —</option>';
     selCity.disabled  = true;
     if (this.value && wilayah) isiKabupaten(this.value);
   });
 
-  selCity.addEventListener('change', function () {
-    hidCityName.value = this.options[this.selectedIndex].dataset.name || '';
+  selCity.addEventListener('change', function() {
+    const chosen = this.options[this.selectedIndex];
+    hidCityName.value = chosen ? (chosen.dataset.name || '') : '';
   });
 
-  (async () => {
+  // ── Init ──
+  (async function() {
     selProv.disabled  = true;
     selProv.innerHTML = '<option value="">Memuat data wilayah…</option>';
     selCity.disabled  = true;
@@ -158,13 +198,14 @@ $extraScript = "<script>
       wilayah = await fetchWilayah();
       isiProvinsi();
     } catch (e) {
-      selProv.innerHTML = '<option value="">Gagal memuat wilayah — muat ulang halaman</option>';
+      selProv.innerHTML = '<option value="">Gagal memuat — muat ulang halaman</option>';
       selProv.disabled  = false;
-      console.error('BPS wilayah error:', e);
+      console.error('[BPS] Error:', e.message);
     }
   })();
 })();
-</script>";
+</script>
+JSEOF;
 
 $pageTitle = 'Daftar Akun';
 $cssFile   = 'auth';
@@ -183,12 +224,10 @@ require_once 'includes/header.php';
       </div>
       <span class="auth-brand-name"><?= APP_NAME ?></span>
     </div>
-
     <div class="auth-hero">
       <h2 class="auth-hero-title">Sistem Rekam Medis<br><em>Terintegrasi</em></h2>
       <p class="auth-hero-desc">Platform digital untuk tenaga medis dan pasien dalam ekosistem layanan kesehatan yang efisien.</p>
     </div>
-
     <div class="auth-features">
       <div class="auth-feature-item">
         <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
@@ -242,6 +281,7 @@ require_once 'includes/header.php';
                placeholder="08xxxxxxxxxx" value="<?= sanitize($old['phone'] ?? '') ?>">
       </div>
 
+      <!-- Provinsi -->
       <div class="form-group">
         <label class="form-label" for="province">Provinsi <span class="req">*</span></label>
         <select class="form-control <?= isset($errors['province']) ? 'error' : '' ?>"
@@ -253,6 +293,7 @@ require_once 'includes/header.php';
         <?php if (isset($errors['province'])): ?><div class="form-error-text"><?= sanitize($errors['province']) ?></div><?php endif; ?>
       </div>
 
+      <!-- Kabupaten / Kota -->
       <div class="form-group">
         <label class="form-label" for="city">Kabupaten / Kota <span class="req">*</span></label>
         <select class="form-control <?= isset($errors['city']) ? 'error' : '' ?>"
